@@ -543,7 +543,8 @@ const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: 'high-performance'
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+// Tối thiểu 1.5x để viền model nhỏ (Qingxiao) bớt răng cưa/nhấp nháy khi di chuyển
+renderer.setPixelRatio(Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2));
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping; // không tone-map => không bệt trắng
