@@ -77,6 +77,7 @@ const CORE_CHARACTERS = {
     core:       true,
     unlocked:   true,
     color:      '#26a9ff',       // accent màu chat bubble
+    walkSpeed:  0.89,            // đo từ sải chân clip Cafe_Walk (world u/s)
     personality: 'Tsundere — phủ nhận cảm xúc, hay đỏ mặt',
     catchphrase: 'Đừng hiểu lầm!',
     system: `Bạn là Kei, học sinh Blue Archive (trường Hyakkiyako). Tính cách tsundere điển hình:
@@ -112,6 +113,7 @@ CHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|no
     core:       true,
     unlocked:   true,
     color:      '#c084fc',
+    walkSpeed:  0.84,            // đo từ sải chân clip Cafe_Walk (world u/s)
     personality: 'Robot — ngốc nghếch nghiện game',
     catchphrase: 'Pan-pakapan! Aris đã sẵn sàng làm nhiệm vụ!',
     system: `Bạn là Aris, robot AI của Abydos, cực kỳ nghiêm túc và logic nhưng hay hiểu nhầm cảm xúc. Tính cách:
@@ -1607,10 +1609,16 @@ function readPointer(event) {
   pointerWorld.set(pointerNDC.x * view.halfWidth, pointerNDC.y * view.halfHeight);
 }
 
+// Vùng bấm = hộp bao quanh pet. Dùng ray–box thay vì raycast tam giác:
+// pet 180k tam giác raycast mỗi lần rê chuột từng làm sập FPS.
+const petHitBox = new THREE.Box3();
+
 function isPointerOnPet() {
   if (!model) return false;
+  petHitBox.min.set(rig.position.x - petHalfWidth, rig.position.y - 0.02, -0.6);
+  petHitBox.max.set(rig.position.x + petHalfWidth, rig.position.y + petHeight, 0.6);
   raycaster.setFromCamera(pointerNDC, camera);
-  return raycaster.intersectObject(rig, true).length > 0;
+  return raycaster.ray.intersectsBox(petHitBox);
 }
 
 function onPointerMove(event) {
@@ -1884,7 +1892,7 @@ window.addEventListener('keydown', (event) => {
  * 9. Cập nhật mỗi frame
  * ------------------------------------------------------------------------ */
 function walkSpeedFor(mode) {
-  return characterWalkSpeed || CONFIG.walkSpeed[mode];
+  return characterWalkSpeed || (currentChar && currentChar.walkSpeed) || CONFIG.walkSpeed[mode];
 }
 
 function updateWalking(dt) {
@@ -2007,6 +2015,7 @@ window.__kei = {
   get animations() { return Object.keys(actions); },
   get position() { return rig.position.toArray(); },
   get yaw() { return rig.rotation.y; },
+
   get walkSpeed() { return walkSpeedFor('CAFE'); },
 
   // Toạ độ màn hình của đỉnh đầu Kei (neo bong bóng thoại)
