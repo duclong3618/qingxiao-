@@ -154,6 +154,8 @@ CHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|no
     // File rig không có clip đứng yên: giữ nguyên một khung hình của Walking
     // tại thời điểm hai chân chạm đất, tay buông (tính từ dữ liệu clip)
     idlePose: { clip: 'Walking', time: 0.276 },
+    // Tốc độ đi khớp bước chân: biên độ sải chân trong clip / thời lượng clip
+    strideSpeed: 0.337,          // đơn vị model mỗi giây (tính từ dữ liệu Walking)
     // Tên clip trong file rig (Mixamo) → các trạng thái của app
     clips: {
       walk:     'Walking',
@@ -162,23 +164,23 @@ CHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|no
       death:    'BeHit_FlyUp',
       panic:    'BeHit_FlyUp'
     },
-    personality: 'Đã rig — thích nhảy múa, lúc rảnh là đứng quẩy',
-    catchphrase: 'Nhạc lên là mình nhảy thôi~',
-    system: `Bạn là "Qingxiao", desktop pet trong app Blue Archive (model đã được rig, có animation).\n- Xưng "mình", gọi người dùng là "Sensei"\n- Tính cách hồn nhiên, thích vận động và nhảy múa, lúc rảnh hay đứng quẩy theo nhịp\n- Trả lời ngắn gọn 1-2 câu, thân thiện\nCHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|normal","text":"..."}`,
+    personality: 'Cô giáo (lão sư) — nghiêm túc, dịu dàng',
+    catchphrase: 'Sensei, vào lớp thôi nào~',
+    system: `Bạn là "Qingxiao", cô giáo (lão sư) trong app desktop pet, model đã được rig và có animation.\n- Xưng "mình" hoặc "cô", gọi người dùng là "Sensei"\n- Tính cách: nghiêm túc, chỉn chu, nhưng dịu dàng và quan tâm học trò\n- Hay nhắc Sensei nghỉ ngơi, học bài, giữ sức khỏe\n- Trả lời ngắn gọn 1-2 câu, đúng giọng cô giáo\nCHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|normal","text":"..."}`,
     lines: {
-      click:   ['Sensei gọi mình ạ?', 'Mình đang quẩy đây~', 'Cần gì thế Sensei?'],
-      pet:     ['Ơ~ thích thế!', 'Xoa đầu nữa đi~'],
-      petOver: ['Đủ rồi nha Sensei~'],
-      ex:      ['Mình thử nhé!', 'Lần này nghiêm túc đấy!'],
-      victory: ['Thắng rồi!', 'Sensei thấy chưa?'],
-      throw:   ['Oái!', 'Sensei!!'],
-      dizzy:   ['Chóng mặt quá...', 'Đừng lắc nữa mà...'],
-      chase:   ['Bắt được rồi!'],
-      cafe:    ['Nghỉ tay chút nhé~'],
-      combat:  ['Sẵn sàng rồi!'],
+      click:   ['Sensei gọi mình ạ?', 'Có bài tập cần hỏi à?', 'Mình đang đây.'],
+      pet:     ['Ơ... được rồi~', 'Ngoan lắm, nhưng tập trung chút đi~'],
+      petOver: ['Đủ rồi nhé Sensei.'],
+      ex:      ['Để cô xử lý.', 'Nghiêm túc nào!'],
+      victory: ['Xong rồi, Sensei.', 'Đúng như cô dạy nhé.'],
+      throw:   ['Ối!', 'Sensei!!'],
+      dizzy:   ['Chóng mặt quá...', 'Đừng lắc nữa...'],
+      chase:   ['Bắt được rồi.'],
+      cafe:    ['Nghỉ tay chút nhé Sensei~'],
+      combat:  ['Sẵn sàng rồi.'],
       hello:   ['Sensei chăm chỉ ghê~'],
-      sitDown: ['Mình ngồi xuống nhé...', 'Mỏi chân rồi...'],
-      sitUp:   ['Đứng dậy nào~', 'Được rồi!']
+      sitDown: ['Cô ngồi chút nhé.', 'Mỏi chân rồi...'],
+      sitUp:   ['Đứng dậy nào.', 'Được rồi.']
     }
   },
 
@@ -641,6 +643,10 @@ const actions = {};
 
 // Model tĩnh (0 clip): mô phỏng nhịp thở / lắc khi đi bằng biến đổi ở mức model
 let staticMotion = false;
+// Tốc độ đi riêng của nhân vật (null = dùng CONFIG.walkSpeed)
+let characterWalkSpeed = null;
+// Góc quay mục tiêu của pet — rig.rotation.y được damp về đây mỗi frame
+let yawTarget = 0;
 let staticLean = 0;
 const modelBasePosition = new THREE.Vector3();
 const modelBaseEuler = new THREE.Euler();
@@ -835,6 +841,7 @@ function disposeModel() {
   haloBaseY = 0;
   staticMotion = false;
   staticLean = 0;
+  characterWalkSpeed = null;
 }
 
 function setupCharacterModel(gltf, char) {
@@ -864,6 +871,9 @@ function setupCharacterModel(gltf, char) {
 
   // Hướng gốc của từng model (một số model xuất ngược mặt)
   model.rotation.y = char.modelYaw || 0;
+
+  // Tốc độ đi khớp sải chân của model (nhỏ hơn thì bước ngắn hơn)
+  characterWalkSpeed = char.strideSpeed ? char.strideSpeed * scale : null;
 
   modelBasePosition.copy(model.position);
   modelBaseEuler.copy(model.rotation);
@@ -1264,6 +1274,7 @@ function playFrozenPose(pose) {
   action.time = pose.time;
   action.paused = true;
   action.play();
+  action.fadeIn(0.2);   // tránh giật khi chuyển từ đi/động tác về tư thế đứng
 
   currentAction = action;
   return true;
@@ -1297,7 +1308,7 @@ function playOneShot(name, { seconds = 0, sayKey = null, fade = 0.2, faceCamera 
 
   clearTimeout(restTimer);
   state = 'ACTION';
-  if (faceCamera) rig.rotation.y = 0;
+  if (faceCamera) yawTarget = 0;
 
   if (!play(name, { loop: false, fade })) {
     enterIdle();
@@ -1364,7 +1375,7 @@ function enterIdle() {
   sitting = false;
   state = 'IDLE';
   velocity.set(0, 0);
-  rig.rotation.y = 0;
+  yawTarget = 0;
   const idlePose = currentChar && currentChar.idlePose;
   const frozen = idlePose && playFrozenPose(idlePose);
   if (!frozen) play(pickFor('idle', ANIM.idle[mode], ANIM.idle.CAFE, ANIM.idle.COMBAT, ANIM.carried));
@@ -1381,7 +1392,7 @@ function enterSit() {
   clearTimeout(restTimer);
   clearTimeout(behaviourTimer);
   velocity.set(0, 0);
-  rig.rotation.y = 0;
+  yawTarget = 0;
   rig.position.y = groundY;
   // Formation_Idle_Random là clip ngồi thư giãn — nếu không có fallback Cafe_Idle
   const sitPose = currentChar && currentChar.idlePose;
@@ -1400,7 +1411,19 @@ function toggleSit() {
 
 function setFacing(direction) {
   facing = direction;
-  rig.rotation.y = direction > 0 ? Math.PI / 2 : -Math.PI / 2;
+  yawTarget = direction > 0 ? Math.PI / 2 : -Math.PI / 2;
+}
+
+// Quay người mượt theo góc ngắn nhất thay vì giật ngay 90°
+function angleDelta(current, target) {
+  let delta = (target - current) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  else if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+}
+
+function dampAngle(current, target, lambda, dt) {
+  return current + angleDelta(current, target) * (1 - Math.exp(-lambda * dt));
 }
 
 function onActionFinished(event) {
@@ -1476,7 +1499,7 @@ function idleVariation() {
 
   if (chosen.loop) {
     state = 'IDLE';
-    rig.rotation.y = 0;
+    yawTarget = 0;
     play(chosen.name, { loop: true, fade: 0.3 });
   } else {
     playOneShot(chosen.name, { seconds: chosen.seconds || 0, sayKey: chosen.sayKey, fade: 0.25 });
@@ -1650,7 +1673,7 @@ function onPointerDown(event) {
   // COMBAT: click bất kỳ đâu trong cửa sổ khi interactive → bắn
   if (mode === 'COMBAT' && interactive && state !== 'FALL' && state !== 'DEAD') {
     // Xoay mặt về hướng chuột
-    rig.rotation.y = lastPointer.x < worldToScreen(rig.position).x ? Math.PI : 0;
+    yawTarget = lastPointer.x < worldToScreen(rig.position).x ? Math.PI : 0;
     spawnBullet();
     if (state !== 'ACTION') runAttackCombo();
     return;
@@ -1675,7 +1698,7 @@ function onPointerDown(event) {
   lastMoveTime = performance.now();
 
   setInteractive(true);
-  rig.rotation.y = 0;
+  yawTarget = 0;
 }
 
 function dragToPointer() {
@@ -1765,7 +1788,7 @@ function runEx() {
 
   clearTimeout(restTimer);
   state = 'ACTION';
-  rig.rotation.y = 0;
+  yawTarget = 0;
 
   const started = play(ANIM.exStart, { loop: false, fade: 0.1 })
     || play('Exs', { loop: false, fade: 0.1 });
@@ -1778,7 +1801,7 @@ function runEx() {
 function playVictory() {
   clearTimeout(restTimer);
   state = 'ACTION';
-  rig.rotation.y = 0;
+  yawTarget = 0;
 
   if (!play(pickFor('victory', ANIM.victoryStart), { loop: false, fade: 0.15 })) return enterIdle();
   say(line('victory'), 1800);
@@ -1859,6 +1882,10 @@ window.addEventListener('keydown', (event) => {
 /* --------------------------------------------------------------------------
  * 9. Cập nhật mỗi frame
  * ------------------------------------------------------------------------ */
+function walkSpeedFor(mode) {
+  return characterWalkSpeed || CONFIG.walkSpeed[mode];
+}
+
 function updateWalking(dt) {
   if (state === 'CHASE') {
     if (!pointerInside) return enterIdle();
@@ -1867,13 +1894,16 @@ function updateWalking(dt) {
     if (Math.abs(dx) <= 0.3) return arriveChase();
 
     setFacing(dx > 0 ? 1 : -1);
-    rig.position.x += Math.sign(dx) * Math.min(CONFIG.walkSpeed.COMBAT * dt, Math.abs(dx));
+    rig.position.x += Math.sign(dx) * Math.min(walkSpeedFor('COMBAT') * dt, Math.abs(dx));
     return;
   }
 
   if (state !== 'WALK') return;
 
-  rig.position.x += facing * CONFIG.walkSpeed[mode] * dt;
+  // Chưa quay xong thì xoay tại chỗ, không trượt ngang
+  if (Math.abs(angleDelta(rig.rotation.y, yawTarget)) > 0.5) return;
+
+  rig.position.x += facing * walkSpeedFor(mode) * dt;
 
   if (rig.position.x >= limitX) {
     rig.position.x = limitX;
@@ -1913,7 +1943,7 @@ function land() {
   }
 
   state = 'ACTION';
-  rig.rotation.y = 0;
+  yawTarget = 0;
   const name = pickFor('reaction', ANIM.reaction[mode], ANIM.reaction.CAFE, ANIM.reaction.COMBAT);
   if (!play(name, { loop: false, fade: 0.12 })) enterIdle();
 }
@@ -1923,7 +1953,7 @@ function die() {
   state = 'DEAD';
   velocity.set(0, 0);
   rig.position.y = groundY;
-  rig.rotation.y = 0;
+  yawTarget = 0;
 
   // Nếu clip Vital_Death không tồn tại, tự đứng dậy sau 0.7s
   if (!play(pickFor('death', ANIM.death), { loop: false, fade: 0.08 })) scheduleIdle(700);
@@ -1939,6 +1969,7 @@ function frame() {
   const time = clock.elapsedTime;
 
   if (mixer) mixer.update(dt);
+  rig.rotation.y = dampAngle(rig.rotation.y, yawTarget, 12, dt);
   if (staticMotion) updateStaticMotion(dt, time);
   if (haloPivot) haloPivot.position.y = haloBaseY + Math.sin(time * 2.2) * 0.012;
 
@@ -1974,6 +2005,8 @@ window.__kei = {
   get animation() { return currentAction ? currentAction.getClip().name : null; },
   get animations() { return Object.keys(actions); },
   get position() { return rig.position.toArray(); },
+  get yaw() { return rig.rotation.y; },
+  get walkSpeed() { return walkSpeedFor('CAFE'); },
 
   // Toạ độ màn hình của đỉnh đầu Kei (neo bong bóng thoại)
   screenPos() { return headScreenPos() || { x: 0, y: 0 }; },
