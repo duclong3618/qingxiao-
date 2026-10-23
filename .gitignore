@@ -1,13 +1,19 @@
-# Dependencies (npm install để khôi phục)
+# Dependencies
 node_modules/
 
-# Model 3D nặng — không đưa vào repo
+# Model 3D — chỉ commit model app thực sự dùng
 *.glb
 *.gltf
 *.bin
 *.fbx
+!/Kei.glb
+!BlueArchiveModels/Arisu.glb
+!BlueArchiveModels/koxoamodelnay.glb
 BlueArchiveModels/.backup/
+BlueArchiveModels/*_old.glb
+*_old.glb
 
 # Log / file tạm khi debug
 *.log
+.tmp-electron.log
 .tmp-*

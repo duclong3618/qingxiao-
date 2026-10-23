@@ -37,6 +37,7 @@ const CONFIG = {
   petCooldownMs: 2600,
   doubleClickMs: 320,
   shakeFlips: 6,          // số lần đổi hướng kéo để bị choáng
+  idleFps: 30,            // giới hạn render khi pet đứng yên
   apiKey:     '',         // nạp từ env KEI_API_KEY qua IPC
   apiModel:   'claude-sonnet-4-6',
   apiMaxTok:  220
@@ -153,6 +154,7 @@ CHỈ trả về JSON: {"emotion":"happy|excited|surprised|flustered|thinking|no
     color:      '#94a3b8',
     modelYaw:   0,               // model rig sẵn quay mặt về +Z (về phía camera)
     heightScale: 0.42,           // thấp hơn hẳn Kei/Aris (Kei 1.9u)
+    singleSided: true,           // model Tripo xuất 1 lớp mặt: bỏ DoubleSide để giảm fill-rate
     // File rig không có clip đứng yên: giữ nguyên một khung hình của Walking
     // tại thời điểm hai chân chạm đất, tay buông (tính từ dữ liệu clip)
     idlePose: { clip: 'Walking', time: 0.276 },
@@ -542,11 +544,11 @@ camera.position.set(0, 0, 12);
 
 const renderer = new THREE.WebGLRenderer({
   alpha: true,
-  antialias: true,
+  antialias: false,          // cửa sổ trong suốt full-screen: AA rất tốn compositing
   powerPreference: 'high-performance'
 });
-// Tối thiểu 1.5x để viền model nhỏ (Qingxiao) bớt răng cưa/nhấp nháy khi di chuyển
-renderer.setPixelRatio(Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 2));
+// Pet chỉ chiếm ~1/3 chiều cao màn hình; render 1x giảm mạnh pixel phải tô mỗi frame
+renderer.setPixelRatio(1);
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping; // không tone-map => không bệt trắng
@@ -717,6 +719,20 @@ function applyAnimeMaterials(root) {
   });
 }
 
+// Model Tripo khai báo doubleSided cho toàn bộ lưới; phần lớn là mặt kín nên
+// chỉ cần FrontSide. Giữ DoubleSide cho vật liệu trong suốt/cắt alpha để
+// không mất tóc mỏng hoặc chi tiết một lớp.
+function applySingleSided(root) {
+  root.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials) {
+      if (!material || material.transparent || material.alphaTest > 0) continue;
+      material.side = THREE.FrontSide;
+    }
+  });
+}
+
 /* ---------- 4.2 Halo lơ lửng ---------- */
 function setupHalo(root) {
   let haloMesh = null;
@@ -851,6 +867,7 @@ function setupCharacterModel(gltf, char) {
   currentChar = char;   // pickFor() cần alias clip của đúng nhân vật
   model = gltf.scene;
   applyAnimeMaterials(model);
+  if (char.singleSided) applySingleSided(model);
   setupHalo(model);
 
   model.traverse((node) => {
@@ -1563,6 +1580,9 @@ let charMenuOpen = false;
 let pointerInside = false;
 let hoverCheckTimer = 0;
 let hasPointer = false;
+// Hit-test tối đa ~60Hz dù chuột bắn pointermove dày đặc
+let lastHitTestAt = 0;
+let lastHit = false;
 
 function setInteractive(next) {
   if (next === interactive) return;
@@ -1637,10 +1657,15 @@ function onPointerMove(event) {
     chaseTargetX = THREE.MathUtils.clamp(pointerWorld.x, -limitX, limitX);
   }
 
-  const hit = isPointerOnPet();
-  if (hit !== hovering) setHovering(hit);
+  // Ray-box chỉ chạy tối đa ~60Hz; pointermove vẫn được xử lý đủ để xoa đầu
+  const now = performance.now();
+  if (now - lastHitTestAt >= 12) {
+    lastHitTestAt = now;
+    lastHit = isPointerOnPet();
+    if (lastHit !== hovering) setHovering(lastHit);
+  }
 
-  handlePetting(event.clientX - previousX, hit);
+  handlePetting(event.clientX - previousX, lastHit);
 }
 
 // Rê chuột qua lại trên người Kei = xoa đầu
@@ -1972,8 +1997,15 @@ function die() {
 }
 
 const clock = new THREE.Clock();
+let lastRenderAt = 0;
+const IDLE_FRAME_MS = 1000 / CONFIG.idleFps;
 
-function frame() {
+function frame(now = performance.now()) {
+  // Đứng yên / ngồi / nằm: 30fps là đủ, giảm một nửa số frame phải composite
+  const idleLike = state === 'IDLE' || state === 'SIT' || state === 'DEAD';
+  if (idleLike && now - lastRenderAt < IDLE_FRAME_MS - 1) return;
+  lastRenderAt = now;
+
   const dt = Math.min(clock.getDelta(), 0.05);
   const time = clock.elapsedTime;
 
@@ -2001,7 +2033,19 @@ function frame() {
 
 applyViewport();
 window.addEventListener('resize', applyViewport);
-renderer.setAnimationLoop(frame);
+
+function startLoop() {
+  clock.getDelta();   // bỏ khoảng thời gian đã dừng để animation không nhảy
+  renderer.setAnimationLoop(frame);
+}
+
+// Cửa sổ bị ẩn/minimize: dừng hẳn vòng render để không đốt GPU vô ích
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) renderer.setAnimationLoop(null);
+  else startLoop();
+});
+
+startLoop();
 
 /* --------------------------------------------------------------------------
  * 10. Debug nhanh trong DevTools
