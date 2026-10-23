@@ -1,0 +1,13 @@
+# Dependencies (npm install để khôi phục)
+node_modules/
+
+# Model 3D nặng — không đưa vào repo
+*.glb
+*.gltf
+*.bin
+*.fbx
+BlueArchiveModels/.backup/
+
+# Log / file tạm khi debug
+*.log
+.tmp-*

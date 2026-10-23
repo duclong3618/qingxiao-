@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kei Desktop Pet</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      cursor: default;
+    }
+
+    canvas { display: block; }
+
+    /* Gợi ý điều khiển, chỉ hiện khi bấm S */
+    #hud {
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      padding: 8px 14px 8px 16px;
+      border-radius: 4px;
+      background: rgba(14, 24, 42, 0.86);
+      border-left: 4px solid #26a9ff;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      color: #dcefff;
+      font: 12px/1.5 "Segoe UI", "Noto Sans", sans-serif;
+      letter-spacing: 0.2px;
+      pointer-events: none;
+      opacity: 0;
+      transform: skewX(-8deg);
+      transition: opacity 0.22s ease;
+    }
+
+    #hud.visible { opacity: 1; }
+
+    #hud .name {
+      font-weight: 700;
+      color: #ffffff;
+      margin-right: 6px;
+    }
+
+    #hud b {
+      display: inline-block;
+      min-width: 12px;
+      padding: 0 4px;
+      margin: 0 2px;
+      border-radius: 3px;
+      background: #26a9ff;
+      color: #06121f;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    /* Hạt hiệu ứng (tim, ngôi sao) vẽ bằng canvas 2D, không cần ảnh */
+    #fx {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* Bong bóng thoại kiểu MomoTalk, neo vào xương đầu */
+    #bubble {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 3;
+      max-width: 240px;
+      padding: 7px 12px;
+      border-radius: 12px;
+      border: 2px solid #7fd4ff;
+      background: #ffffff;
+      color: #16324a;
+      font: 13px/1.35 "Segoe UI", "Noto Sans", sans-serif;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+      white-space: normal;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      will-change: transform;
+    }
+
+    #bubble.visible { opacity: 1; }
+
+    #bubble::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      bottom: -9px;
+      margin-left: -7px;
+      border: 7px solid transparent;
+      border-top-color: #7fd4ff;
+    }
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "pet://kei/node_modules/three/build/three.module.js",
+        "three/addons/": "pet://kei/node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div id="bubble"></div>
+
+  <div id="hud">
+    <span class="name">KEI</span>
+    Click: tương tác · Double-click: EX · Vuốt qua: xoa đầu · Kéo thả: nhấc / ném ·
+<b>S</b> Bảng gợi ý · <b>Tab</b> Đổi nhân vật · Chuột phải: menu ·
+    <b>1</b> Cafe/Combat · <b>2</b> EX Skill · <b>3</b> Victory · <b>4</b> Ngồi · <b>Esc</b> thoát
+  </div>
+
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

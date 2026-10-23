@@ -1,0 +1,16 @@
+{
+  "name": "kei-desktop-pet",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kei (Blue Archive) 3D desktop pet - Electron + Three.js",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}
